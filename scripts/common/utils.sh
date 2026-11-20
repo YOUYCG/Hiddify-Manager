@@ -797,12 +797,18 @@ function install_python310() {
 # How a panel link's certificate looks to a browser: trusted, self_signed (or otherwise not trusted) or insecure (http).
 # Asks this server itself, so a domain behind a CDN or not resolving yet is still checked.
 function link_cert_state() {
-    local url="$1" host
+    local url="$1" host authority port=443
     [[ "$url" == http://* ]] && { echo insecure; return; }
     # Ask this server itself, so a domain behind a CDN or not resolving yet is still checked.
-    host="${url#https://}"
-    host="${host%%/*}"
-    [[ "$host" == \[* ]] || host="${host%%:*}"  # strip :port, keep [IPv6] intact
+    authority="${url#https://}"
+    authority="${authority%%/*}"
+    if [[ "$authority" =~ ^(\[[^]]+\]|[^:]+)(:([0-9]+))?$ ]]; then
+        host="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[3]:-443}"
+    else
+        echo self_signed
+        return
+    fi
     # openssl sends the ClientHello immediately; curl loads the whole CA bundle first, which on slow
     # boards takes longer than the 100ms rpxy-l4 waits for the SNI of a new connection. The probe then
     # fails and a perfectly valid certificate is reported as self-signed.
@@ -813,7 +819,7 @@ function link_cert_state() {
         host="${host#[}"
         check=(-noservername -verify_ip "${host%]}")
     fi
-    if timeout 8 openssl s_client -connect 127.0.0.1:443 "${check[@]}" \
+    if timeout 8 openssl s_client -connect "127.0.0.1:$port" "${check[@]}" \
         -verify_return_error </dev/null >/dev/null 2>&1; then
         echo trusted
     else

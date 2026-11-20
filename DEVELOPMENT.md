@@ -46,6 +46,30 @@ A git checkout is detected (`is_dev_checkout` in `scripts/common/utils.sh`):
 git pull --recurse-submodules && make build
 ```
 
+## Use different public gateway ports
+
+Hiddify normally listens on HTTP 80/TCP and TLS 443/TCP+UDP. On a server where another application owns those ports,
+check out this fork's `configurable-gateway-ports` branch with its submodules. Set both values in
+`/opt/hiddify-manager/data/hiddify-panel/app.cfg` before the first `make build`. If that file does not exist yet, create
+it from `services/panel/app.cfg` (for example, `install -D -m 600 services/panel/app.cfg /opt/hiddify-manager/data/hiddify-panel/app.cfg`).
+Keep all existing settings when editing an installed instance.
+
+```dotenv
+HIDDIFY_GATEWAY_HTTP_PORT=8080
+HIDDIFY_GATEWAY_TLS_PORT=8443
+```
+
+Both settings are optional. A nondefault port must be free, in the range 1024–65535, and different from the other
+gateway port. Before applying changes on an existing server, also check for conflicts with per-domain ports and
+other Hiddify services. The settings are read when the panel starts, so restart the panel and run a full config apply
+to regenerate the listeners and firewall rules. If the TLS listener is still on the old port after applying, restart
+`hiddify-rpxy-l4` to rebind it. On EC2, allow the chosen HTTP port over TCP and the chosen TLS port over TCP and UDP in
+the security group if clients will connect directly. Refresh subscriptions after changing the ports.
+
+ACME HTTP-01 still validates on public TCP 80. When another app owns port 80, route
+`/.well-known/acme-challenge/` to Hiddify's HTTP listener, or import a certificate obtained separately. The settings
+above do not change the internal panel service at port 9000.
+
 ## Everyday work
 
 | Task | How |

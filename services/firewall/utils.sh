@@ -63,9 +63,10 @@ function allow_apps_ports() {
 }
 
 # Domains with their own gateway ports (Domains page → Advanced): what arrives there is handed to the normal
-# gateway ports, with the client's address intact. TLS ports (tcp and udp) go to 443, HTTP ports to 80.
+# gateway ports, with the client's address intact. TLS ports (TCP and UDP) and HTTP ports go to their configured listeners.
 # The chain is rebuilt each time, so ports that were changed or removed stop being redirected.
-function redirect_domain_ports() { # redirect_domain_ports "9443 8443" "8080"
+function redirect_domain_ports() { # redirect_domain_ports "9443" "8081" 8443 8080
+    local tls_target=${3:-443} http_target=${4:-80}
     local tool port chain=HIDDIFY_DOMAIN_PORTS
     for tool in iptables ip6tables; do
         [ "$tool" = ip6tables ] && ! has_ipv6 && continue
@@ -76,11 +77,11 @@ function redirect_domain_ports() { # redirect_domain_ports "9443 8443" "8080"
             # do not pass PREROUTING: send them through the same chain from OUTPUT, only to a local destination.
             $tool -t nat -C OUTPUT -m addrtype --dst-type LOCAL -j $chain 2>/dev/null || $tool -t nat -I OUTPUT -m addrtype --dst-type LOCAL -j $chain
             for port in $1; do
-                $tool -t nat -A $chain -p tcp --dport "$port" -j REDIRECT --to-ports 443
-                $tool -t nat -A $chain -p udp --dport "$port" -j REDIRECT --to-ports 443
+                $tool -t nat -A $chain -p tcp --dport "$port" -j REDIRECT --to-ports "$tls_target"
+                $tool -t nat -A $chain -p udp --dport "$port" -j REDIRECT --to-ports "$tls_target"
             done
             for port in $2; do
-                $tool -t nat -A $chain -p tcp --dport "$port" -j REDIRECT --to-ports 80
+                $tool -t nat -A $chain -p tcp --dport "$port" -j REDIRECT --to-ports "$http_target"
             done
         } || true # (ip6tables may have no nat table on some kernels)
     done
